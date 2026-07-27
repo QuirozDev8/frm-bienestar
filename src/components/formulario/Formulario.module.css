@@ -1,0 +1,153 @@
+.formulario {
+  position: relative;
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(17, 16, 29, 0.08), rgba(17, 16, 29, 0.2)),
+    url('../../assests/img/bg.png') center / cover no-repeat;
+  isolation: isolate;
+}
+
+.formulario::before {
+  position: absolute;
+  z-index: -1;
+  width: min(72vw, 980px);
+  height: min(72vw, 980px);
+  border-radius: 999px;
+  background: rgba(0, 1, 243, 0.14);
+  content: '';
+  filter: blur(110px);
+}
+
+.panel {
+  position: relative;
+  width: min(64vw, 1180px);
+  height: 80dvh;
+  max-height: 760px;
+  animation: panel-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.contenido {
+  height: calc(100% - 8px);
+  overflow-y: auto;
+  scrollbar-color: rgba(17, 16, 29, 0.28) transparent;
+  scrollbar-width: thin;
+}
+
+.contenido::-webkit-scrollbar {
+  width: 6px;
+}
+
+.contenido::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(17, 16, 29, 0.28);
+}
+
+.panel::after {
+  position: absolute;
+  right: -46px;
+  top: 82px;
+  width: 116px;
+  height: 116px;
+  border: 20px solid rgba(225, 255, 0, 0.5);
+  border-radius: 999px;
+  content: '';
+  pointer-events: none;
+}
+
+.barraProgreso {
+  position: relative;
+  min-width: 0;
+  background: linear-gradient(
+    90deg,
+    #0001f3 0%,
+    #df2a25 52%,
+    #e1ff00 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(17, 16, 29, 0.1),
+    0 2px 8px rgba(0, 1, 243, 0.18);
+  transition: width 350ms ease;
+}
+
+.barraProgreso::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  content: '';
+  transform: translateX(-100%);
+  animation: progress-shine 2.6s ease-in-out infinite;
+}
+
+.opcionSeleccionada {
+  border-color: #0001f3;
+  background: rgba(0, 1, 243, 0.045);
+  box-shadow: 0 8px 20px rgba(0, 1, 243, 0.1);
+}
+
+.opcionSeleccionada .indicador {
+  border-color: #0001f3;
+  box-shadow: inset 0 0 0 3px #fff;
+  background: #0001f3;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes progress-shine {
+  0%,
+  55% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 768px) {
+  .formulario {
+    place-items: start center;
+    padding-top: 13dvh;
+    background-image:
+      linear-gradient(rgba(17, 16, 29, 0.08), rgba(17, 16, 29, 0.18)),
+      url('../../assests/img/bg-movil.png');
+  }
+
+  .panel {
+    width: calc(100vw - 24px);
+    height: 64dvh;
+  }
+
+  .panel::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .barraProgreso::after {
+    animation: none;
+  }
+
+  .barraProgreso,
+  .opcion {
+    transition: none;
+  }
+}
