@@ -1,30 +1,39 @@
 import { useState } from 'react'
+import { useFormToken } from '../../hooks/useFormToken.js'
+import {
+  calcularResultadosDass21,
+  obtenerDimensionPrincipalDass21,
+} from '../../services/dass21.js'
+import { construirPayloadFormulario } from '../../services/formPayload.js'
+import { debeMostrarRespuestaFinal } from '../../services/formFlow.js'
+import { enviarRespuestasAlWebhook } from '../../services/n8nWebhook.js'
+import Response from '../response/Response.jsx'
 import styles from './Formulario.module.css'
 
 const PREGUNTAS_POR_PASO = 2
 
 const preguntas = [
-  { id: 1, pregunta: '¿Ejemplo?' },
-  { id: 2, pregunta: '¿Ejemplo?' },
-  { id: 3, pregunta: '¿Ejemplo?' },
-  { id: 4, pregunta: '¿Ejemplo?' },
-  { id: 5, pregunta: '¿Ejemplo?' },
-  { id: 6, pregunta: '¿Ejemplo?' },
-  { id: 7, pregunta: '¿Ejemplo?' },
-  { id: 8, pregunta: '¿Ejemplo?' },
-  { id: 9, pregunta: '¿Ejemplo?' },
-  { id: 10, pregunta: '¿Ejemplo?' },
-  { id: 11, pregunta: '¿Ejemplo?' },
-  { id: 12, pregunta: '¿Ejemplo?' },
-  { id: 13, pregunta: '¿Ejemplo?' },
-  { id: 14, pregunta: '¿Ejemplo?' },
-  { id: 15, pregunta: '¿Ejemplo?' },
-  { id: 16, pregunta: '¿Ejemplo?' },
-  { id: 17, pregunta: '¿Ejemplo?' },
-  { id: 18, pregunta: '¿Ejemplo?' },
-  { id: 19, pregunta: '¿Ejemplo?' },
-  { id: 20, pregunta: '¿Ejemplo?' },
-  { id: 21, pregunta: '¿Ejemplo?' },
+  { id: 1, pregunta: 'Me ha costado mucho descargar la tensión' },
+  { id: 2, pregunta: 'Me di cuenta que tenía la boca seca' },
+  { id: 3, pregunta: 'No podía sentir ningún sentimiento positivo' },
+  { id: 4, pregunta: 'Se me hizo difícil respirar' },
+  { id: 5, pregunta: 'Se me hizo difícil tomar la iniciativa para hacer cosas' },
+  { id: 6, pregunta: 'Reaccioné exageradamente en ciertas situaciones' },
+  { id: 7, pregunta: 'Sentí que mis manos temblaban' },
+  { id: 8, pregunta: 'He sentido que estaba gastando una gran cantidad de energía' },
+  { id: 9, pregunta: 'Estaba preocupado por situaciones en las cuales podía tener pánico o en las que podría hacer el ridículo' },
+  { id: 10, pregunta: 'He sentido que no había nada que me ilusionara' },
+  { id: 11, pregunta: 'Me he sentido inquieto' },
+  { id: 12, pregunta: 'Se me hizo difícil relajarme ' },
+  { id: 13, pregunta: 'Me sentí triste y deprimido' },
+  { id: 14, pregunta: 'No toleré nada que no me permitiera continuar con lo que estaba haciendo' },
+  { id: 15, pregunta: 'Sentí que estaba al punto de pánico' },
+  { id: 16, pregunta: 'No me pude entusiasmar por nada' },
+  { id: 17, pregunta: 'Sentí que valía muy poco como persona' },
+  { id: 18, pregunta: 'He tendido a sentirme enfadado con facilidad ' },
+  { id: 19, pregunta: 'Sentí los latidos de mi corazón a pesar de no haber hecho ningún esfuerzo físico ' },
+  { id: 20, pregunta: 'Tuve miedo sin razón' },
+  { id: 21, pregunta: 'Sentí que la vida no tenía ningún sentido' },
 ]
 
 const opcionesRespuesta = [
@@ -60,9 +69,13 @@ const opcionesRespuesta = [
 
 
 export default function Formularo() {
+  const { token, isDevelopment } = useFormToken()
   const [pasoActual, setPasoActual] = useState(0)
   const [respuestasSeleccionadas, setRespuestasSeleccionadas] = useState({})
   const [formularioCompletado, setFormularioCompletado] = useState(false)
+  const [estadoEnvio, setEstadoEnvio] = useState('idle')
+  const [errorEnvio, setErrorEnvio] = useState('')
+  const [dimensionPrincipal, setDimensionPrincipal] = useState(null)
 
   const totalPasos = Math.ceil(preguntas.length / PREGUNTAS_POR_PASO)
   const indiceInicial = pasoActual * PREGUNTAS_POR_PASO
@@ -70,11 +83,13 @@ export default function Formularo() {
     indiceInicial,
     indiceInicial + PREGUNTAS_POR_PASO,
   )
+
   const totalRespondidas = preguntas.reduce(
     (total, _, indice) =>
       total + (respuestasSeleccionadas[indice] ? 1 : 0),
     0,
   )
+
   const pasoCompleto = preguntasDelPaso.every(
     (_, indice) => respuestasSeleccionadas[indiceInicial + indice],
   )
@@ -87,11 +102,15 @@ export default function Formularo() {
       [indicePregunta]: valor,
     }))
     setFormularioCompletado(false)
+    setEstadoEnvio('idle')
+    setErrorEnvio('')
   }
 
   const irAlPasoAnterior = () => {
     setPasoActual((paso) => Math.max(paso - 1, 0))
     setFormularioCompletado(false)
+    setEstadoEnvio('idle')
+    setErrorEnvio('')
   }
 
   const irAlPasoSiguiente = () => {
@@ -99,12 +118,81 @@ export default function Formularo() {
     setPasoActual((paso) => Math.min(paso + 1, totalPasos - 1))
   }
 
-  const enviarFormulario = (evento) => {
+  const enviarFormulario = async (evento) => {
     evento.preventDefault()
 
-    if (totalRespondidas !== preguntas.length) return
+    if (
+      totalRespondidas !== preguntas.length ||
+      estadoEnvio === 'enviando'
+    ) {
+      return
+    }
 
-    setFormularioCompletado(true)
+    if (!token && !isDevelopment) {
+      setEstadoEnvio('error')
+      setErrorEnvio(
+        'No fue posible enviar las respuestas. inténtalo nuevamente abriendo desde el link que te llego al correo.',
+      )
+      setFormularioCompletado(false)
+      return
+    }
+
+    const respuestas = preguntas.map((pregunta, indicePregunta) => {
+      const idOpcion = respuestasSeleccionadas[indicePregunta]
+      const opcionSeleccionada = opcionesRespuesta.find(
+        (opcion) => opcion.id === idOpcion,
+      )
+
+      return {
+        idPregunta: pregunta.id,
+        pregunta: pregunta.pregunta,
+        idRespuesta: opcionSeleccionada.id,
+        respuesta: opcionSeleccionada.respuesta,
+        pesoRespuesta: opcionSeleccionada.pesoRespuesta,
+      }
+    })
+    const resultadosDass21 = calcularResultadosDass21(respuestas)
+    const dimensionPrincipalCalculada =
+      obtenerDimensionPrincipalDass21(resultadosDass21)
+
+    setEstadoEnvio('enviando')
+    setErrorEnvio('')
+    setFormularioCompletado(false)
+
+    try {
+      const payload = construirPayloadFormulario(
+        {
+          formulario: 'dass-21-2',
+          fechaEnvio: new Date().toISOString(),
+          totalPreguntas: preguntas.length,
+          ...resultadosDass21,
+          respuestas,
+        },
+        token,
+      )
+
+      await enviarRespuestasAlWebhook(payload)
+
+      setDimensionPrincipal(dimensionPrincipalCalculada)
+      setEstadoEnvio('enviado')
+      setFormularioCompletado(true)
+    } catch (error) {
+      setEstadoEnvio('error')
+      setErrorEnvio(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible enviar las respuestas. Intenta nuevamente.',
+      )
+    }
+  }
+
+  if (
+    debeMostrarRespuestaFinal(
+      estadoEnvio,
+      dimensionPrincipal,
+    )
+  ) {
+    return <Response dimension={dimensionPrincipal} />
   }
 
   return (
@@ -141,8 +229,8 @@ export default function Formularo() {
                   Cuéntanos cómo te has sentido
                 </h1>
                 <p className="mt-1.5 max-w-xl text-sm font-medium leading-relaxed text-[#11101d]/60">
-                  Elige la opción que mejor represente tu experiencia reciente.
-                  No hay respuestas correctas o incorrectas.
+                  Por favor lea las siguientes afirmaciones e indique en
+                  qué grado le ha ocurrido a usted esta afirmación durante la semana pasada.
                 </p>
               </div>
 
@@ -230,6 +318,7 @@ export default function Formularo() {
                             <input
                               checked={seleccionada}
                               className="sr-only"
+                              disabled={estadoEnvio === 'enviando'}
                               id={idOpcion}
                               name={idPregunta}
                               onChange={() =>
@@ -268,31 +357,45 @@ export default function Formularo() {
               <p
                 aria-live="polite"
                 className={`flex items-center gap-2 text-xs font-bold sm:text-sm ${
-                  formularioCompletado
-                    ? 'text-[#11101d]'
-                    : pasoCompleto
-                      ? 'text-[#0001f3]'
-                      : 'text-[#11101d]/50'
+                  estadoEnvio === 'error'
+                    ? 'text-[#df2a25]'
+                    : formularioCompletado
+                      ? 'text-[#11101d]'
+                      : pasoCompleto
+                        ? 'text-[#0001f3]'
+                        : 'text-[#11101d]/50'
                 }`}
                 role="status"
               >
                 <span
                   aria-hidden="true"
                   className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
-                    formularioCompletado
-                      ? 'bg-[#e1ff00] text-[#11101d]'
-                      : pasoCompleto
-                        ? 'bg-[#0001f3] text-white'
-                        : 'bg-[#11101d]/10 text-[#11101d]/50'
+                    estadoEnvio === 'error'
+                      ? 'bg-[#df2a25] text-white'
+                      : formularioCompletado
+                        ? 'bg-[#e1ff00] text-[#11101d]'
+                        : pasoCompleto
+                          ? 'bg-[#0001f3] text-white'
+                          : 'bg-[#11101d]/10 text-[#11101d]/50'
                   }`}
                 >
-                  {pasoCompleto || formularioCompletado ? '✓' : '!'}
+                  {estadoEnvio === 'error'
+                    ? '!'
+                    : estadoEnvio === 'enviando'
+                      ? '…'
+                      : pasoCompleto || formularioCompletado
+                        ? '✓'
+                        : '!'}
                 </span>
-                {formularioCompletado
-                  ? '¡Listo! Todas tus respuestas están completas.'
-                  : pasoCompleto
-                    ? 'Sección completa. Ya puedes continuar.'
-                    : 'Responde ambas preguntas para continuar.'}
+                {estadoEnvio === 'enviando'
+                  ? 'Enviando tus respuestas...'
+                  : estadoEnvio === 'error'
+                    ? errorEnvio
+                    : formularioCompletado
+                      ? '¡Listo! Tus respuestas fueron enviadas correctamente.'
+                      : pasoCompleto
+                        ? 'Sección completa. Ya puedes continuar.'
+                        : 'Responde ambas preguntas para continuar.'}
               </p>
 
               <div className="grid shrink-0 grid-cols-2 gap-2.5 sm:flex">
@@ -300,7 +403,7 @@ export default function Formularo() {
                   className={`min-w-28 cursor-pointer rounded-xl border-2 border-[#11101d] bg-white px-5 py-3 text-sm font-black text-[#11101d] transition hover:bg-[#11101d] hover:text-white focus:outline-none focus:ring-4 focus:ring-[#11101d]/15 disabled:cursor-not-allowed disabled:opacity-35 ${
                     pasoActual === 0 ? 'invisible' : ''
                   }`}
-                  disabled={pasoActual === 0}
+                  disabled={pasoActual === 0 || estadoEnvio === 'enviando'}
                   onClick={irAlPasoAnterior}
                   type="button"
                 >
@@ -310,10 +413,12 @@ export default function Formularo() {
                 {esUltimoPaso ? (
                   <button
                     className="min-w-28 cursor-pointer rounded-xl bg-[#df2a25] px-5 py-3 text-sm font-black text-white shadow-[0_8px_22px_rgba(223,42,37,0.24)] transition hover:-translate-y-0.5 hover:bg-[#11101d] focus:outline-none focus:ring-4 focus:ring-[#df2a25]/25 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
-                    disabled={!pasoCompleto}
+                    disabled={!pasoCompleto || estadoEnvio === 'enviando'}
                     type="submit"
                   >
-                    Finalizar ✓
+                    {estadoEnvio === 'enviando'
+                      ? 'Enviando...'
+                      : 'Finalizar ✓'}
                   </button>
                 ) : (
                   <button
