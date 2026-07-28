@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useFormToken } from '../../hooks/useFormToken.js'
 import {
   calcularResultadosDass21,
@@ -7,10 +7,20 @@ import {
 import { construirPayloadFormulario } from '../../services/formPayload.js'
 import { debeMostrarRespuestaFinal } from '../../services/formFlow.js'
 import { enviarRespuestasAlWebhook } from '../../services/n8nWebhook.js'
+import {
+  guardarProgresoFormulario,
+  leerProgresoFormulario,
+  limpiarProgresoFormulario,
+  obtenerSessionStorage,
+} from '../../utils/formSession.js'
 import Response from '../response/Response.jsx'
 import styles from './Formulario.module.css'
 
 const PREGUNTAS_POR_PASO = 2
+const PROGRESO_INICIAL = {
+  pasoActual: 0,
+  respuestasSeleccionadas: {},
+}
 
 const preguntas = [
   { id: 1, pregunta: 'Me ha costado mucho descargar la tensión' },
@@ -69,9 +79,23 @@ const opcionesRespuesta = [
 
 
 export default function Formularo() {
-  const { token, isDevelopment } = useFormToken()
-  const [pasoActual, setPasoActual] = useState(0)
-  const [respuestasSeleccionadas, setRespuestasSeleccionadas] = useState({})
+  const {
+    token,
+    isDevelopment,
+    limpiarTokenDeSesion,
+  } = useFormToken()
+  const [progresoInicial] = useState(
+    () =>
+      leerProgresoFormulario(
+        obtenerSessionStorage(),
+        token,
+      ) ?? PROGRESO_INICIAL,
+  )
+  const [pasoActual, setPasoActual] = useState(
+    progresoInicial.pasoActual,
+  )
+  const [respuestasSeleccionadas, setRespuestasSeleccionadas] =
+    useState(progresoInicial.respuestasSeleccionadas)
   const [formularioCompletado, setFormularioCompletado] = useState(false)
   const [estadoEnvio, setEstadoEnvio] = useState('idle')
   const [errorEnvio, setErrorEnvio] = useState('')
@@ -95,6 +119,14 @@ export default function Formularo() {
   )
   const progreso = Math.round((totalRespondidas / preguntas.length) * 100)
   const esUltimoPaso = pasoActual === totalPasos - 1
+
+  useEffect(() => {
+    guardarProgresoFormulario(obtenerSessionStorage(), {
+      token,
+      pasoActual,
+      respuestasSeleccionadas,
+    })
+  }, [token, pasoActual, respuestasSeleccionadas])
 
   const actualizarRespuesta = (indicePregunta, valor) => {
     setRespuestasSeleccionadas((respuestasAnteriores) => ({
@@ -173,6 +205,8 @@ export default function Formularo() {
 
       await enviarRespuestasAlWebhook(payload)
 
+      limpiarProgresoFormulario(obtenerSessionStorage())
+      limpiarTokenDeSesion()
       setDimensionPrincipal(dimensionPrincipalCalculada)
       setEstadoEnvio('enviado')
       setFormularioCompletado(true)

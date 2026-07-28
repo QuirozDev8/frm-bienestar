@@ -18,6 +18,7 @@ function convertirEnUrl(url) {
 
 export function resolverFormToken({
   url,
+  sessionToken,
   isDevelopment = false,
   testToken,
 }) {
@@ -30,6 +31,15 @@ export function resolverFormToken({
     return {
       token: tokenDeUrl,
       origen: 'url',
+    }
+  }
+
+  const tokenDeSesion = normalizarFormToken(sessionToken)
+
+  if (tokenDeSesion) {
+    return {
+      token: tokenDeSesion,
+      origen: 'sesion',
     }
   }
 

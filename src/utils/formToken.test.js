@@ -42,9 +42,10 @@ test('elimina el token de la URL sin recargar la página', () => {
   ])
 })
 
-test('el token de sesión permanece disponible al cambiar de paso', () => {
+test('restaura el token de sesión después de limpiar la URL', () => {
   const sesion = resolverFormToken({
-    url: 'http://localhost:5173/formulario?token=abc123xyz',
+    url: 'http://localhost:5173/formulario',
+    sessionToken: 'abc123xyz',
   })
   let pasoActual = 0
 
@@ -53,6 +54,7 @@ test('el token de sesión permanece disponible al cambiar de paso', () => {
 
   assert.equal(pasoActual, 2)
   assert.equal(sesion.token, 'abc123xyz')
+  assert.equal(sesion.origen, 'sesion')
 })
 
 test('usa el token configurado únicamente cuando está en desarrollo', () => {
@@ -72,15 +74,28 @@ test('usa el token configurado únicamente cuando está en desarrollo', () => {
   assert.equal(sesionProduccion.token, null)
 })
 
-test('el token de la URL tiene prioridad sobre el de desarrollo', () => {
+test('el token de la URL tiene prioridad sobre sesión y desarrollo', () => {
   const sesion = resolverFormToken({
     url: 'http://localhost:5173/formulario?token=token-url',
+    sessionToken: 'token-sesion',
     isDevelopment: true,
     testToken: 'token-local',
   })
 
   assert.equal(sesion.token, 'token-url')
   assert.equal(sesion.origen, 'url')
+})
+
+test('el token de sesión tiene prioridad sobre el de desarrollo', () => {
+  const sesion = resolverFormToken({
+    url: 'http://localhost:5173/formulario',
+    sessionToken: 'token-sesion',
+    isDevelopment: true,
+    testToken: 'token-local',
+  })
+
+  assert.equal(sesion.token, 'token-sesion')
+  assert.equal(sesion.origen, 'sesion')
 })
 
 test('maneja la ausencia del token sin inventar un valor', () => {

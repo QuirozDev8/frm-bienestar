@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   limpiarFormTokenDeUrl,
   resolverFormToken,
 } from '../utils/formToken.js'
+import {
+  guardarFormTokenEnSesion,
+  leerFormTokenDeSesion,
+  limpiarFormTokenDeSesion,
+  obtenerSessionStorage,
+} from '../utils/formSession.js'
 
 const viteEnv = import.meta.env ?? {}
 const isDevelopment = viteEnv.DEV === true
@@ -17,6 +23,9 @@ function obtenerSesionInicial() {
 
   return resolverFormToken({
     url: window.location.href,
+    sessionToken: leerFormTokenDeSesion(
+      obtenerSessionStorage(),
+    ),
     isDevelopment,
     testToken: viteEnv.VITE_FORM_TEST_TOKEN,
   })
@@ -27,13 +36,22 @@ export function useFormToken() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      guardarFormTokenEnSesion(
+        obtenerSessionStorage(),
+        sesion.token,
+      )
       limpiarFormTokenDeUrl(window.location, window.history)
     }
+  }, [sesion.token])
+
+  const limpiarTokenDeSesion = useCallback(() => {
+    limpiarFormTokenDeSesion(obtenerSessionStorage())
   }, [])
 
   return {
     token: sesion.token,
     origenToken: sesion.origen,
     isDevelopment,
+    limpiarTokenDeSesion,
   }
 }

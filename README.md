@@ -46,6 +46,11 @@ http://localhost:5173/formulario?token=token-prueba-001
 La aplicación conserva el token durante el diligenciamiento, lo elimina de la
 URL visible y lo adjunta al JSON enviado al webhook.
 
+El token, el paso actual y las respuestas se conservan temporalmente en
+`sessionStorage`, por lo que una recarga de la página no reinicia el
+formulario. Esta información se elimina al completar el envío o al cerrar la
+pestaña, y nunca se reutiliza si se abre un enlace con un token diferente.
+
 Para probar el formulario localmente sin agregar el parámetro a la URL, define
 un token de prueba en `.env`:
 
